@@ -6,7 +6,7 @@ from ShrutixMusic import nand
 from config import BANNED_USERS
 
 
-@app.on_message(filters.video_chat_started & filters.group & ~BANNED_USERS, group=10)
+@nand.on_message(filters.video_chat_started & filters.group & ~BANNED_USERS, group=10)
 async def video_chat_started_handler(client, message: Message):
     """Notify when someone starts a video chat"""
     try:
@@ -28,7 +28,7 @@ async def video_chat_started_handler(client, message: Message):
         print(f"[VC START] Error: {e}")
 
 
-@app.on_message(filters.video_chat_ended & filters.group & ~BANNED_USERS, group=10)
+@nand.on_message(filters.video_chat_ended & filters.group & ~BANNED_USERS, group=10)
 async def video_chat_ended_handler(client, message: Message):
     """Notify when someone ends a video chat"""
     try:
@@ -36,7 +36,6 @@ async def video_chat_ended_handler(client, message: Message):
         chat_title = message.chat.title
         duration = message.video_chat_ended.duration
         
-        # Convert duration to readable format
         hours = duration // 3600
         minutes = (duration % 3600) // 60
         seconds = duration % 60
@@ -63,16 +62,18 @@ async def video_chat_ended_handler(client, message: Message):
         print(f"[VC END] Error: {e}")
 
 
-@app.on_message(filters.video_chat_members_invited & filters.group & ~BANNED_USERS, group=10)
+@nand.on_message(filters.video_chat_members_invited & filters.group & ~BANNED_USERS, group=10)
 async def video_chat_invite_handler(client, message: Message):
     """Notify when someone invites members to video chat"""
     try:
         inviter = message.from_user
         invited_users = message.video_chat_members_invited.users
         
-        # Send notification for each invited user
         for invited_user in invited_users:
-            notification = f"<blockquote>🥂 {inviter.mention} ɪɴᴠɪᴛᴇᴅ {invited_user.mention} ᴛᴏ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ</blockquote>"
+            notification = (
+                f"<blockquote>🥂 {inviter.mention} ɪɴᴠɪᴛᴇᴅ "
+                f"{invited_user.mention} ᴛᴏ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ</blockquote>"
+            )
             await message.reply_text(notification)
             
     except Exception as e:

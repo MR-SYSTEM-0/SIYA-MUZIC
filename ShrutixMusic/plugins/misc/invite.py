@@ -2,7 +2,7 @@ from pyrogram import filters
 from pyrogram.types import Message
 from pyrogram.enums import ChatMemberStatus
 
-from ShrutixMusic import app
+from ShrutixMusic import nand
 from config import BANNED_USERS
 
 

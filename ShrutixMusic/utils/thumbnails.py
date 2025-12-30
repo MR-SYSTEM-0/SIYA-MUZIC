@@ -1,110 +1,124 @@
 import os
 import re
-import aiohttp
-import aiofiles
 
+import aiofiles
+import aiohttp
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from unidecode import unidecode
 from py_yt import VideosSearch
 
+from ShrutixMusic import nand
 from config import YOUTUBE_IMG_URL
 
 
-# -------------------- helpers -------------------- #
+def changeImageSize(maxWidth, maxHeight, image):
+    widthRatio = maxWidth / image.size[0]
+    heightRatio = maxHeight / image.size[1]
+    newWidth = int(widthRatio * image.size[0])
+    newHeight = int(heightRatio * image.size[1])
+    newImage = image.resize((newWidth, newHeight))
+    return newImage
 
-def clean_text(text: str, limit: int = 45):
-    text = unidecode(text)
-    text = re.sub(r"\s+", " ", text)
-    return text[:limit].strip()
+
+def clear(text):
+    list = text.split(" ")
+    title = ""
+    for i in list:
+        if len(title) + len(i) < 60:
+            title += " " + i
+    return title.strip()
 
 
-# -------------------- main -------------------- #
+async def get_thumb(videoid):
+    if os.path.isfile(f"cache/{videoid}.png"):
+        return f"cache/{videoid}.png"
 
-async def get_thumb(videoid: str):
-    cache_path = f"cache/{videoid}.png"
-    os.makedirs("cache", exist_ok=True)
-
-    if os.path.isfile(cache_path):
-        return cache_path
-
+    url = f"https://www.youtube.com/watch?v={videoid}"
     try:
-        search = VideosSearch(
-            f"https://www.youtube.com/watch?v={videoid}", limit=1
-        )
-        data = (await search.next())["result"][0]
+        results = VideosSearch(url, limit=1)
+        for result in (await results.next())["result"]:
+            try:
+                title = result["title"]
+                title = re.sub("\W+", " ", title)
+                title = title.title()
+            except:
+                title = "Unsupported Title"
+            try:
+                duration = result["duration"]
+            except:
+                duration = "Unknown Mins"
+            thumbnail = result["thumbnails"][0]["url"].split("?")[0]
+            try:
+                views = result["viewCount"]["short"]
+            except:
+                views = "Unknown Views"
+            try:
+                channel = result["channel"]["name"]
+            except:
+                channel = "Unknown Channel"
 
-        title = clean_text(data.get("title", "Unknown Title"))
-        duration = data.get("duration", "00:00")
-        thumb_url = data["thumbnails"][0]["url"].split("?")[0]
-
-        # download thumbnail
         async with aiohttp.ClientSession() as session:
-            async with session.get(thumb_url) as resp:
-                if resp.status != 200:
-                    return YOUTUBE_IMG_URL
-                img_bytes = await resp.read()
+            async with session.get(thumbnail) as resp:
+                if resp.status == 200:
+                    f = await aiofiles.open(f"cache/thumb{videoid}.png", mode="wb")
+                    await f.write(await resp.read())
+                    await f.close()
 
-        temp_img = f"cache/temp_{videoid}.jpg"
-        async with aiofiles.open(temp_img, "wb") as f:
-            await f.write(img_bytes)
-
-        # ---------------- base image ---------------- #
-        base = Image.open(temp_img).convert("RGB").resize((1280, 720))
-
-        # blurred background
-        bg = base.filter(ImageFilter.GaussianBlur(22))
-        bg = ImageEnhance.Brightness(bg).enhance(0.45)
-
-        draw = ImageDraw.Draw(bg)
-
-        # ---------------- fonts ---------------- #
-        title_font = ImageFont.truetype("assets/font.ttf", 42)
-        artist_font = ImageFont.truetype("assets/font2.ttf", 28)
-        small_font = ImageFont.truetype("assets/font2.ttf", 24)
-
-        # ---------------- card ---------------- #
-        card_x1, card_y1 = 120, 200
-        card_x2, card_y2 = 1160, 520
-
-        card = Image.new(
-            "RGBA",
-            (card_x2 - card_x1, card_y2 - card_y1),
-            (15, 15, 15, 210),
-        )
-        bg.paste(card, (card_x1, card_y1), card)
-
-        # ---------------- song square ---------------- #
-        song_img = base.resize((240, 240))
-        bg.paste(song_img, (card_x1 + 30, card_y1 + 40))
-
-        text_x = card_x1 + 300
-
-        # ---------------- texts ---------------- #
+        youtube = Image.open(f"cache/thumb{videoid}.png")
+        image1 = changeImageSize(1280, 720, youtube)
+        image2 = image1.convert("RGBA")
+        background = image2.filter(filter=ImageFilter.BoxBlur(10))
+        enhancer = ImageEnhance.Brightness(background)
+        background = enhancer.enhance(0.5)
+        draw = ImageDraw.Draw(background)
+        arial = ImageFont.truetype("ShrutixMusic/assets/font2.ttf", 30)
+        font = ImageFont.truetype("ShrutixMusic/assets/font.ttf", 30)
+        draw.text((1110, 8), unidecode(nand.name), fill="white", font=arial)
         draw.text(
-            (text_x, card_y1 + 45),
-            title,
+            (55, 560),
+            f"{channel} | {views[:23]}",
+            (255, 255, 255),
+            font=arial,
+        )
+        draw.text(
+            (57, 600),
+            clear(title),
+            (255, 255, 255),
+            font=font,
+        )
+        draw.line(
+            [(55, 660), (1220, 660)],
             fill="white",
-            font=title_font,
+            width=5,
+            joint="curve",
         )
-
+        draw.ellipse(
+            [(918, 648), (942, 672)],
+            outline="white",
+            fill="white",
+            width=15,
+        )
         draw.text(
-            (text_x, card_y1 + 100),
-            "AYUSH MUSIC",
-            fill="#b3b3b3",
-            font=artist_font,
+            (36, 685),
+            "00:00",
+            (255, 255, 255),
+            font=arial,
         )
-
         draw.text(
-            (text_x, card_y1 + 135),
-            "PLAYING",
-            fill="#1db954",
-            font=artist_font,
+            (1185, 685),
+            f"{duration[:23]}",
+            (255, 255, 255),
+            font=arial,
         )
-
-        # ---------------- progress bar ---------------- #
-        bar_y = card_y2 - 70
-
-        # time labels
+        try:
+            os.remove(f"cache/thumb{videoid}.png")
+        except:
+            pass
+        background.save(f"cache/{videoid}.png")
+        return f"cache/{videoid}.png"
+    except Exception as e:
+        print(e)
+        return YOUTUBE_IMG_URL
         draw.text(
             (card_x1 + 30, bar_y),
             "00:00",

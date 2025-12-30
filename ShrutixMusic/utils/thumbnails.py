@@ -5,47 +5,37 @@ import aiofiles
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from unidecode import unidecode
+from py_yt import VideosSearch
 
 from config import YOUTUBE_IMG_URL
 
-# try import (safe)
-try:
-    from youtube_search_python import VideosSearch
-except Exception:
-    VideosSearch = None
 
+# -------------------- helpers -------------------- #
 
-def clean_text(text, limit=40):
+def clean_text(text: str, limit: int = 45):
     text = unidecode(text)
-    words = text.split()
-    out = ""
-    for w in words:
-        if len(out) + len(w) <= limit:
-            out += " " + w
-    return out.strip()
+    text = re.sub(r"\s+", " ", text)
+    return text[:limit].strip()
 
 
-async def get_thumb(videoid, chat_id=None):
+# -------------------- main -------------------- #
+
+async def get_thumb(videoid: str):
     cache_path = f"cache/{videoid}.png"
+    os.makedirs("cache", exist_ok=True)
+
     if os.path.isfile(cache_path):
         return cache_path
 
     try:
-        title = "unknown title"
-        duration = "00:00"
-        thumb_url = YOUTUBE_IMG_URL
+        search = VideosSearch(
+            f"https://www.youtube.com/watch?v={videoid}", limit=1
+        )
+        data = (await search.next())["result"][0]
 
-        # fetch youtube data
-        if VideosSearch:
-            search = VideosSearch(
-                f"https://www.youtube.com/watch?v={videoid}", limit=1
-            )
-            data = (await search.next())["result"][0]
-            title = clean_text(
-                re.sub(r"\W+", " ", data.get("title", title))
-            )
-            duration = data.get("duration", duration)
-            thumb_url = data["thumbnails"][0]["url"].split("?")[0]
+        title = clean_text(data.get("title", "Unknown Title"))
+        duration = data.get("duration", "00:00")
+        thumb_url = data["thumbnails"][0]["url"].split("?")[0]
 
         # download thumbnail
         async with aiohttp.ClientSession() as session:
@@ -54,40 +44,42 @@ async def get_thumb(videoid, chat_id=None):
                     return YOUTUBE_IMG_URL
                 img_bytes = await resp.read()
 
-        temp_thumb = f"cache/temp_{videoid}.jpg"
-        async with aiofiles.open(temp_thumb, "wb") as f:
+        temp_img = f"cache/temp_{videoid}.jpg"
+        async with aiofiles.open(temp_img, "wb") as f:
             await f.write(img_bytes)
 
-        base = Image.open(temp_thumb).convert("RGB").resize((1280, 720))
+        # ---------------- base image ---------------- #
+        base = Image.open(temp_img).convert("RGB").resize((1280, 720))
 
-        # background blur
-        bg = base.filter(ImageFilter.GaussianBlur(20))
-        bg = ImageEnhance.Brightness(bg).enhance(0.55)
+        # blurred background
+        bg = base.filter(ImageFilter.GaussianBlur(22))
+        bg = ImageEnhance.Brightness(bg).enhance(0.45)
 
         draw = ImageDraw.Draw(bg)
 
-        # fonts
-        title_font = ImageFont.truetype("assets/font.ttf", 40)
-        small_font = ImageFont.truetype("assets/font2.ttf", 26)
+        # ---------------- fonts ---------------- #
+        title_font = ImageFont.truetype("assets/font.ttf", 42)
+        artist_font = ImageFont.truetype("assets/font2.ttf", 28)
+        small_font = ImageFont.truetype("assets/font2.ttf", 24)
 
-        # card
-        card_x1, card_y1 = 140, 220
-        card_x2, card_y2 = 1140, 520
+        # ---------------- card ---------------- #
+        card_x1, card_y1 = 120, 200
+        card_x2, card_y2 = 1160, 520
 
         card = Image.new(
             "RGBA",
             (card_x2 - card_x1, card_y2 - card_y1),
-            (0, 0, 0, 180),
+            (15, 15, 15, 210),
         )
         bg.paste(card, (card_x1, card_y1), card)
 
-        # song image
-        song_img = base.resize((220, 220))
-        bg.paste(song_img, (card_x1 + 25, card_y1 + 30))
+        # ---------------- song square ---------------- #
+        song_img = base.resize((240, 240))
+        bg.paste(song_img, (card_x1 + 30, card_y1 + 40))
 
-        text_x = card_x1 + 270
+        text_x = card_x1 + 300
 
-        # title
+        # ---------------- texts ---------------- #
         draw.text(
             (text_x, card_y1 + 45),
             title,
@@ -95,68 +87,67 @@ async def get_thumb(videoid, chat_id=None):
             font=title_font,
         )
 
-        # artist / bot name
         draw.text(
             (text_x, card_y1 + 100),
-            "ayush music",
+            "AYUSH MUSIC",
             fill="#b3b3b3",
-            font=small_font,
+            font=artist_font,
         )
 
-        # playing text
         draw.text(
             (text_x, card_y1 + 135),
-            "playing",
+            "PLAYING",
             fill="#1db954",
-            font=small_font,
+            font=artist_font,
         )
 
-        # vc listeners
-        listeners = get_listeners(chat_id) if chat_id else 0
-        draw.text(
-            (text_x, card_y1 + 170),
-            f"{listeners} listening now",
-            fill="#b3b3b3",
-            font=small_font,
-        )
+        # ---------------- progress bar ---------------- #
+        bar_y = card_y2 - 70
 
-        # progress bar (spotify style)
-        bar_y = card_y2 - 55
+        # time labels
         draw.text(
-            (card_x1 + 25, bar_y),
+            (card_x1 + 30, bar_y),
             "00:00",
             fill="white",
             font=small_font,
         )
         draw.text(
-            (card_x2 - 70, bar_y),
+            (card_x2 - 90, bar_y),
             duration,
             fill="white",
             font=small_font,
         )
 
+        bar_start = card_x1 + 95
+        bar_end = card_x2 - 120
+
+        # background bar
         draw.line(
-            [(card_x1 + 90, bar_y + 15),
-             (card_x2 - 110, bar_y + 15)],
+            [(bar_start, bar_y + 14), (bar_end, bar_y + 14)],
             fill="#404040",
-            width=4,
+            width=5,
         )
 
+        # filled part (start only – static Spotify look)
+        fill_end = bar_start + int((bar_end - bar_start) * 0.18)
+
+        draw.line(
+            [(bar_start, bar_y + 14), (fill_end, bar_y + 14)],
+            fill="#1db954",
+            width=5,
+        )
+
+        # progress dot
         draw.ellipse(
-            [(card_x1 + 90, bar_y + 11),
-             (card_x1 + 98, bar_y + 19)],
+            (fill_end - 6, bar_y + 8, fill_end + 6, bar_y + 20),
             fill="white",
         )
 
-        # cleanup
-        try:
-            os.remove(temp_thumb)
-        except Exception:
-            pass
-
+        # ---------------- save ---------------- #
         bg.save(cache_path)
+        os.remove(temp_img)
         return cache_path
 
     except Exception as e:
-        print("thumbnail error:", e)
+        print("Thumbnail error:", e)
         return YOUTUBE_IMG_URL

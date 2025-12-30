@@ -10,7 +10,7 @@ from config import YOUTUBE_IMG_URL
 
 # try import (safe)
 try:
-    from py_yt import VideosSearch
+    from youtube_search_python import VideosSearch
 except Exception:
     VideosSearch = None
 

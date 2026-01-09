@@ -1,6 +1,0 @@
-cd path/to/ShrutixMusic
-touch render.yaml
-# file me code likho
-git add render.yaml
-git commit -m "Add render.yaml for Render deployment"
-git push origin main

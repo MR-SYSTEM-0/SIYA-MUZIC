@@ -1,4 +1,4 @@
-cd path/to/SIYA-MUZIC
+cd path/to/ShrutixMusic
 touch render.yaml
 # file me code likho
 git add render.yaml

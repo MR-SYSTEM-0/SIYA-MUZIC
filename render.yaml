@@ -1,5 +1,7 @@
-cd path/to/SIYA-MUZIC
-touch render.yaml
-git add render.yaml
-git commit -m "Add render.yaml for Render deployment"
-git push origin main
+services:
+  - type: worker
+    name: siya-muzic
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
